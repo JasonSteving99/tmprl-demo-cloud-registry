@@ -45,7 +45,7 @@ spec:
           value: event-leads-unversioned
         # Set to "true" on both components for the storage cut-over's freeze window (docs/storage-cutover.md in the source repo).
         - name: WRITES_PAUSED
-          value: "false"
+          value: "true"
       ports:
         - name: http
           containerPort: 8080
@@ -64,7 +64,7 @@ spec:
         - name: AWS_REGION
           value: us-west-1
         - name: WRITES_PAUSED
-          value: "false"
+          value: "true"
   ingress:
     subdomain: events
     temporalAuthRequired: false
