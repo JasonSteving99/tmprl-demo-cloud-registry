@@ -43,6 +43,9 @@ spec:
           value: http://web.tmprl-dem-cld-registry-operator.svc.cluster.local/_auth/verify
         - name: TEMPORAL_TASK_QUEUE
           value: event-leads-unversioned
+        # Set to "true" on both components for the storage cut-over's freeze window (docs/storage-cutover.md in the source repo).
+        - name: WRITES_PAUSED
+          value: "false"
       ports:
         - name: http
           containerPort: 8080
@@ -51,9 +54,17 @@ spec:
       build: app
       args: [worker]
       worker: true
+      # Read/write access to the permanent event table; created by deploy/create-store.sh.
+      awsIamRoleArn: arn:aws:iam::429214323166:role/tmprl-dem-cld-event-leads-worker
       env:
         - name: TEMPORAL_TASK_QUEUE
           value: event-leads-unversioned
+        - name: EVENT_LEADS_TABLE
+          value: tmprl-dem-cld-event-leads
+        - name: AWS_REGION
+          value: us-west-1
+        - name: WRITES_PAUSED
+          value: "false"
   ingress:
     subdomain: events
     temporalAuthRequired: false
