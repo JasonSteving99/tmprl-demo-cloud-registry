@@ -11,7 +11,7 @@ spec:
       compared against direct service calls. Use case: order management that
       keeps working through a store outage.
     tags: [Food Service, Order Management, Saga, Retries, Signals]
-    temporalSdks: [Python, Go, TypeScript, Java, .NET]
+    temporalSdks: [Python, Go, TypeScript, Java, .NET, Rust, PHP]
     links:
       slideDeck:
         url: https://drive.google.com/file/d/1Kk_1i6Dbd_pkqqg4sApXyDUIAYYwIB2B/view
