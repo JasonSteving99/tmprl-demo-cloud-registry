@@ -1,0 +1,168 @@
+apiVersion: registry.tmprl-demo.cloud/v1alpha1
+kind: DemoProject
+metadata:
+  name: agent-harness-examples
+spec:
+  registry:
+    title: Temporal Agent Harness Examples
+    summary: >-
+      Built with Python and TypeScript on the Temporal Agent Harness, with
+      OpenAI, Pydantic AI and Gemini agents. Demonstrates durable sessions,
+      streamed turns, tool approvals, subagents and Code Mode, plus a studio
+      where an agent writes multi-agent flows. Use case: the harness's
+      example agents.
+    tags: [AI Agents, Human-in-the-Loop]
+    temporalSdks: [Python, TypeScript]
+    aiSdks: [OpenAI Agents SDK, Pydantic AI, Google GenAI SDK]
+    # Each workspace's worker queues, server routing and session manager move
+    # under TASK_QUEUE_PREFIX; every Temporal component reads it.
+    crashable:
+      enabled: true
+      taskQueueEnv: TASK_QUEUE_PREFIX
+      baseTaskQueue: agent-harness-examples
+
+  source:
+    repo: https://github.com/temporal-community/temporal-agent-harness
+
+  builds:
+    app:
+      context: .
+      dockerfile: python/examples/demo-catalog.DOCKERFILE
+
+  secrets:
+    openai:
+      shared: openai
+      requiredProperties: [OPENAI_API_KEY]
+    gemini:
+      shared: gemini
+      requiredProperties: [GEMINI_API_KEY]
+
+  # Every component runs one program from the image (/app/bin). Outside a
+  # workspace, TASK_QUEUE_PREFIX keeps the always-on demo's queues under the
+  # same base the workspaces extend.
+  components:
+    server:
+      build: app
+      command:
+        - /app/bin/cli
+        - serve
+        - python/examples/openai_hello/agents.toml
+        - python/examples/agent_dag/agents.toml
+        - python/examples/pydantic_ai_hello/agents.toml
+        - python/examples/monty/agents.toml
+        - python/examples/code_mode_memory/agents.toml
+        - typescript/examples/openai_hello/agents.toml
+        - typescript/examples/monty/agents.toml
+        - --port
+        - "8000"
+      temporalAccess: true
+      env:
+        - name: TASK_QUEUE_PREFIX
+          value: agent-harness-examples
+      ports:
+        - name: http
+          containerPort: 8000
+          servicePort: 80
+    session-manager:
+      build: app
+      command: [/app/bin/cli, session-manager]
+      worker: true
+      replicas: 1
+      env:
+        - name: TASK_QUEUE_PREFIX
+          value: agent-harness-examples
+    openai-hello-worker:
+      build: app
+      command: [/app/bin/py-openai_hello-worker]
+      worker: true
+      replicas: 1
+      secrets: [openai]
+      env:
+        - name: TASK_QUEUE_PREFIX
+          value: agent-harness-examples
+    agent-dag-worker:
+      build: app
+      command: [/app/bin/py-agent_dag-worker]
+      worker: true
+      replicas: 1
+      secrets: [openai]
+      env:
+        - name: TASK_QUEUE_PREFIX
+          value: agent-harness-examples
+    pydantic-ai-hello-worker:
+      build: app
+      command: [/app/bin/py-pydantic_ai_hello-worker]
+      worker: true
+      replicas: 1
+      secrets: [openai]
+      env:
+        - name: TASK_QUEUE_PREFIX
+          value: agent-harness-examples
+    ts-openai-hello-worker:
+      build: app
+      command: [/app/bin/ts-openai-hello-worker]
+      worker: true
+      replicas: 1
+      secrets: [openai]
+      env:
+        - name: TASK_QUEUE_PREFIX
+          value: agent-harness-examples
+    monty-worker:
+      build: app
+      command: [/app/bin/py-monty-worker]
+      worker: true
+      replicas: 1
+      secrets: [gemini]
+      env:
+        - name: TASK_QUEUE_PREFIX
+          value: agent-harness-examples
+    ts-monty-worker:
+      build: app
+      command: [/app/bin/ts-monty-worker]
+      worker: true
+      replicas: 1
+      secrets: [gemini]
+      env:
+        - name: TASK_QUEUE_PREFIX
+          value: agent-harness-examples
+    # Keeps its memories on its own disk: one replica, and they reset when
+    # the pod is replaced.
+    code-mode-memory-worker:
+      build: app
+      command: [/app/bin/py-code_mode_memory-worker]
+      worker: true
+      replicas: 1
+      secrets: [gemini]
+      env:
+        - name: TASK_QUEUE_PREFIX
+          value: agent-harness-examples
+    # The agent_dag studio, served under /studio (the ingress keeps the prefix).
+    studio:
+      build: app
+      command: [/app/bin/agent-dag-studio, "5173"]
+      env:
+        - name: BASE_PATH
+          value: /studio
+      ports:
+        - name: http
+          containerPort: 5173
+
+  ingress:
+    subdomain: agent-harness-examples
+    temporalAuthRequired: true
+    routes:
+      - pathPrefix: /api
+        component: server
+        port: http
+      - pathPrefix: /studio
+        component: studio
+        port: http
+      - pathPrefix: /
+        component: server
+        port: http
+
+  # The console's page, served by the same process as the API.
+  smokeCheck:
+    path: /
+    expectedStatus: 200
+    timeoutSeconds: 15
