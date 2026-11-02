@@ -1,0 +1,106 @@
+apiVersion: registry.tmprl-demo.cloud/v1alpha1
+kind: DemoProject
+metadata:
+  name: playpen-analytics-demo
+spec:
+  registry:
+    title: Playpen Analytics Demo
+    summary: >-
+      Built with Python on the Temporal Agent Harness and Gemini, with a
+      Dogwood policy service. Demonstrates an agent whose every tool call is
+      checked by policy, access a person grants and revokes mid-session, and
+      an audit trail in workflow history. Use case: a bank analyst agent over
+      governed data.
+    tags: [AI Agents, Human-in-the-Loop, Nexus]
+    temporalSdks: [Python]
+    aiSdks: [Google GenAI SDK]
+
+  # The Dockerfile lives on the example's branch. The image pins both of its sources (the
+  # example's commit and the verifier's) itself, so only a change to the Dockerfile rebuilds it.
+  source:
+    repo: https://github.com/temporal-community/temporal-agent-harness
+    branch: worktree-governed-analytics-demo
+    gitRepository:
+      sparseCheckout:
+        - python/examples/playpen-analytics-demo.DOCKERFILE
+        - python/examples/playpen-analytics-demo.DOCKERFILE.dockerignore
+
+  builds:
+    app:
+      context: .
+      dockerfile: python/examples/playpen-analytics-demo.DOCKERFILE
+
+  secrets:
+    gemini:
+      shared: gemini
+      requiredProperties: [GEMINI_API_KEY]
+
+  # The agent asks the verifier before every tool call through this endpoint.
+  temporal:
+    nexusEndpoints:
+      playpen-verifier:
+        targetTaskQueue: tool-verifier
+        allowedCallerNamespaces: [primary]
+
+  components:
+    server:
+      build: app
+      command:
+        - /app/bin/cli
+        - serve
+        - python/examples/governed_analytics/agents.toml
+        - --port
+        - "8000"
+      temporalAccess: true
+      ports:
+        - name: http
+          containerPort: 8000
+          servicePort: 80
+    session-manager:
+      build: app
+      command: [/app/bin/cli, session-manager]
+      worker: true
+      replicas: 1
+    agent-worker:
+      build: app
+      command: [/app/bin/governed-analytics-worker]
+      worker: true
+      replicas: 1
+      secrets: [gemini]
+    # The Dogwood verifier keeps grants and each session's history in a store on its own disk:
+    # one replica, and they reset when the pod is replaced.
+    verifier:
+      build: app
+      command: [/app/bin/playpen-verifier]
+      worker: true
+      replicas: 1
+    # The studio, served under /studio (the ingress keeps the prefix).
+    studio:
+      build: app
+      command: [/app/bin/governed-analytics-studio, "5173"]
+      env:
+        - name: BASE_PATH
+          value: /studio
+      ports:
+        - name: http
+          containerPort: 5173
+
+  ingress:
+    subdomain: playpen-analytics-demo
+    temporalAuthRequired: true
+    routes:
+      - pathPrefix: /api
+        component: server
+        port: http
+      - pathPrefix: /studio
+        component: studio
+        port: http
+      - pathPrefix: /
+        component: server
+        port: http
+
+  # The console's page, served by the same process as the API.
+  smokeCheck:
+    path: /
+    expectedStatus: 200
+    timeoutSeconds: 15
